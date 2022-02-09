@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/labstack/echo/v4"
-	"time"
 	"urlShortener/internal/api"
 	"urlShortener/internal/db"
 )
@@ -24,6 +23,4 @@ func main() {
 		fmt.Printf("Unable to start echo server on port %s, reason %s", port, err.Error())
 		return
 	}
-
-	time.Sleep(5 * time.Minute)
 }
