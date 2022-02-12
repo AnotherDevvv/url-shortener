@@ -1,26 +1,28 @@
 package main
 
 import (
-	"fmt"
-	"github.com/labstack/echo/v4"
+	log "github.com/sirupsen/logrus"
+	"os"
 	"urlShortener/internal/api"
 	"urlShortener/internal/db"
 )
 
-const port = "1323"
-
 func main() {
-	e := echo.New()
-	rep := db.NewUrlRepository()
+	initLogger()
 
-	sh := api.NewShortener(fmt.Sprintf("http://localhost:%s/", port), rep)
+	rep := db.NewURLRepository()
+	defer rep.Close()
 
-	e.POST("/shorten", sh.ShortenUrl)
-	e.GET("/:key", sh.FollowUrl)
+	sh := api.NewShortener(rep)
 
-	err := e.Start(":" + port)
+	api.NewRouter(sh).Start()
+}
+
+func initLogger()  {
+	logfile, err := os.OpenFile("logs", os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		fmt.Printf("Unable to start echo server on port %s, reason %s", port, err.Error())
-		return
+		panic("Unable to create log file")
 	}
+
+	log.SetOutput(logfile)
 }

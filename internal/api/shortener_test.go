@@ -1,8 +1,7 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
@@ -16,56 +15,105 @@ import (
 )
 
 
-const address = "http://127.0.0.1:1323/"
+const (
+	host          = "http://127.0.0.1:1323/"
+	validURL = "http://127.0.0.1/testpath"
+	serverFailURL = "http://127.0.0.1/failme"
+)
 
 func TestMain(m *testing.M) {
 	setUp()
-
 	retCode := m.Run()
-
 	os.Exit(retCode)
 }
 
-var e *echo.Echo
-var sh *Shortener
-
 func setUp() {
-	e = echo.New()
+	router := NewRouter(
+		NewShortener(&mock.RepositoryMock{
+			InsertFunc: func(key string, url string) error {
+				if url == serverFailURL {
+					return errors.New("emulate  service unavailable")
+				}
+				return nil
+			},
+			GetFunc: func(key string) (string, error) {
+				return validURL, nil
+			},
+		},),
+	)
 
-	sh = NewShortener(address, &mock.RepositoryMock{
-		InsertFunc: func(key []byte, url string) error {
-			return nil
-		},
-	})
-
-	e.TRACE("/", func(context echo.Context) error {
+	router.echo.TRACE("/", func(context echo.Context) error {
 		return nil
 	})
-	e.POST("/shorten", sh.ShortenUrl)
-	go e.Start(":1323")
+
+	go router.Start()
 
 	awaitServerStart(5*time.Second)
 }
 
-func TestShortener_ShortenUrl(t *testing.T) {
-	url := "https://127.0.0.1/testpath"
-	hash := sha256.Sum256([]byte(url))
-	req, err := http.NewRequest(
-		echo.POST,
-		fmt.Sprintf("%sshorten?url=%s", address, url),
-		strings.NewReader(``),
-	)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+func TestShortener_ShortenURL(t *testing.T) {
+	testCases := []struct {
+		url            string
+		expectedStatus int
+		expectedLocation string
+	}{
+		{
+			url:            validURL,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			url:            validURL,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			url:            "127.0.0.1",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			url:            serverFailURL,
+			expectedStatus: http.StatusServiceUnavailable,
+		},
 	}
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
 
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, address + hex.EncodeToString(hash[:4]), string(b))
+	// client ignoring redirects
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 
+	for _, tc := range testCases {
+		req, err := http.NewRequest(
+			echo.POST,
+			fmt.Sprintf("%sshorten?url=%s", host, tc.url),
+			strings.NewReader(``),
+		)
+
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+
+
+		require.Equal(t, tc.expectedStatus, resp.StatusCode)
+		if resp.StatusCode == http.StatusOK {
+			expectedCode := encode(tc.url)
+			require.Equal(t, expectedCode, string(body))
+
+			req, err = http.NewRequest(
+				echo.GET,
+				fmt.Sprintf("%s%s", host, expectedCode),
+				strings.NewReader(``),
+			)
+
+			resp, err = client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			require.Equal(t, http.StatusMovedPermanently, resp.StatusCode)
+			require.Equal(t, tc.url, resp.Header.Get("Location"))
+		}
+	}
 }
 
 func awaitServerStart(timeout time.Duration)  {
@@ -73,7 +121,7 @@ func awaitServerStart(timeout time.Duration)  {
 
 	req, _ := http.NewRequest(
 		echo.TRACE,
-		address,
+		host,
 		strings.NewReader(``),
 	)
 
@@ -83,10 +131,10 @@ func awaitServerStart(timeout time.Duration)  {
 
 		if resp.StatusCode == http.StatusOK {
 			break
-		} else {
-			if time.Now().Sub(start) > timeout {
-				panic(fmt.Sprintf("Failed to start echo server for %s", timeout))
-			}
+		}
+
+		if time.Now().Sub(start) > timeout {
+			panic(fmt.Sprintf("Failed to start echo server for %s", timeout))
 		}
 
 		time.Sleep(1 * time.Second)

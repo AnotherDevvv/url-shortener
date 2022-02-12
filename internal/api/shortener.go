@@ -1,11 +1,12 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/md5"
+	"encoding/base32"
 	"errors"
 	"fmt"
 	"github.com/labstack/echo/v4"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 	"urlShortener/internal/db"
@@ -13,59 +14,65 @@ import (
 
 type Shortener struct {
 	urlRepository db.Repository
-	address       string
 }
 
-func NewShortener(address string, r db.Repository) *Shortener {
+func NewShortener(repository db.Repository) *Shortener {
 	return &Shortener {
-		address: address,
-		urlRepository: r,
+		urlRepository: repository,
 	}
 }
 
-func (sh *Shortener) ShortenUrl(c echo.Context) error {
+func (sh *Shortener) ShortenURL(c echo.Context) error {
 	url := c.QueryParam("url")
 
-	fmt.Println(url)
+	log.Debugf("Shortening %s", url)
 
-	e := validate(url)
-	if e != nil {
-		return c.String(http.StatusBadRequest, fmt.Sprintf("URL cannot be shortened because %s", e.Error()))
-	}
-
-	hash := sha256.Sum256([]byte(url))
-
-	err := sh.urlRepository.Insert(hash[:4], url)
-
+	err := validate(url)
 	if err != nil {
-		return c.String(http.StatusServiceUnavailable, e.Error())
+		return c.String(http.StatusBadRequest, fmt.Sprintf("URL cannot be shortened because %s", err))
 	}
 
-	return c.String(http.StatusOK, sh.address + hex.EncodeToString(hash[:4]))
+	key := encode(url)
+
+	err = sh.urlRepository.Insert(key, url)
+	if err != nil {
+		log.Errorf("Failed to insert url %s with key %s. Cause: %s", url, key, err)
+		return c.NoContent(http.StatusServiceUnavailable)
+	}
+
+	log.Infof("URL %s has been encoded to %s key", url, key)
+
+	return c.String(http.StatusOK, key)
 }
 
-func (sh *Shortener) FollowUrl(c echo.Context) error  {
+func (sh *Shortener) FollowURL(c echo.Context) error  {
 	key := c.Param("key")
 
-	hexKey, err := hex.DecodeString(key)
-
-	url, err := sh.urlRepository.Get(hexKey)
-
+	url, err := sh.urlRepository.Get(key)
 	if err != nil {
-		return c.String(http.StatusBadRequest, err.Error())
+		return c.NoContent(http.StatusBadRequest)
 	}
 
 	if len(url) > 0 {
 		return c.Redirect(http.StatusMovedPermanently, url)
-	} else {
-		return c.String(http.StatusBadRequest, fmt.Sprintf("short link with %s", key))
 	}
+
+	return c.String(http.StatusNotFound, fmt.Sprintf("short link with %s key not found", key))
 }
 
 func validate(url string) error {
-	if !strings.HasPrefix(url, "http") || !strings.HasPrefix(url, "https") {
+	if !strings.HasPrefix(url, "http") && !strings.HasPrefix(url, "https") {
 		return errors.New(fmt.Sprintf("url %s does not start with http(s)", url))
-	} else {
-		return nil
 	}
+
+	return nil
+}
+
+// md5 produces 128bit. hash[:5] is a slice of first 5 bytes (40 bits).
+// base32 encodes symbols by 5 bits and produces exactly (40/5)=8 symbols for short link
+// md5 is chosen because its less cpu intensive than sha. base32 doesnt encode into "/" and "+" as base64 does
+func encode(url string) string {
+	hash := md5.Sum([]byte(url))
+
+	return base32.StdEncoding.EncodeToString(hash[:5])
 }

@@ -18,13 +18,13 @@ var _ db.Repository = &RepositoryMock{}
 //
 // 		// make and configure a mocked db.Repository
 // 		mockedRepository := &RepositoryMock{
-// 			CloseFunc: func() error {
+// 			CloseFunc: func()  {
 // 				panic("mock out the Close method")
 // 			},
-// 			GetFunc: func(key []byte) (string, error) {
+// 			GetFunc: func(key string) (string, error) {
 // 				panic("mock out the Get method")
 // 			},
-// 			InsertFunc: func(key []byte, url string) error {
+// 			InsertFunc: func(key string, value string) error {
 // 				panic("mock out the Insert method")
 // 			},
 // 		}
@@ -35,13 +35,13 @@ var _ db.Repository = &RepositoryMock{}
 // 	}
 type RepositoryMock struct {
 	// CloseFunc mocks the Close method.
-	CloseFunc func() error
+	CloseFunc func()
 
 	// GetFunc mocks the Get method.
-	GetFunc func(key []byte) (string, error)
+	GetFunc func(key string) (string, error)
 
 	// InsertFunc mocks the Insert method.
-	InsertFunc func(key []byte, url string) error
+	InsertFunc func(key string, value string) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -51,14 +51,14 @@ type RepositoryMock struct {
 		// Get holds details about calls to the Get method.
 		Get []struct {
 			// Key is the key argument value.
-			Key []byte
+			Key string
 		}
 		// Insert holds details about calls to the Insert method.
 		Insert []struct {
 			// Key is the key argument value.
-			Key []byte
-			// URL is the url argument value.
-			URL string
+			Key string
+			// Value is the value argument value.
+			Value string
 		}
 	}
 	lockClose  sync.RWMutex
@@ -67,7 +67,7 @@ type RepositoryMock struct {
 }
 
 // Close calls CloseFunc.
-func (mock *RepositoryMock) Close() error {
+func (mock *RepositoryMock) Close() {
 	if mock.CloseFunc == nil {
 		panic("RepositoryMock.CloseFunc: method is nil but Repository.Close was just called")
 	}
@@ -76,7 +76,7 @@ func (mock *RepositoryMock) Close() error {
 	mock.lockClose.Lock()
 	mock.calls.Close = append(mock.calls.Close, callInfo)
 	mock.lockClose.Unlock()
-	return mock.CloseFunc()
+	mock.CloseFunc()
 }
 
 // CloseCalls gets all the calls that were made to Close.
@@ -93,12 +93,12 @@ func (mock *RepositoryMock) CloseCalls() []struct {
 }
 
 // Get calls GetFunc.
-func (mock *RepositoryMock) Get(key []byte) (string, error) {
+func (mock *RepositoryMock) Get(key string) (string, error) {
 	if mock.GetFunc == nil {
 		panic("RepositoryMock.GetFunc: method is nil but Repository.Get was just called")
 	}
 	callInfo := struct {
-		Key []byte
+		Key string
 	}{
 		Key: key,
 	}
@@ -112,10 +112,10 @@ func (mock *RepositoryMock) Get(key []byte) (string, error) {
 // Check the length with:
 //     len(mockedRepository.GetCalls())
 func (mock *RepositoryMock) GetCalls() []struct {
-	Key []byte
+	Key string
 } {
 	var calls []struct {
-		Key []byte
+		Key string
 	}
 	mock.lockGet.RLock()
 	calls = mock.calls.Get
@@ -124,33 +124,33 @@ func (mock *RepositoryMock) GetCalls() []struct {
 }
 
 // Insert calls InsertFunc.
-func (mock *RepositoryMock) Insert(key []byte, url string) error {
+func (mock *RepositoryMock) Insert(key string, value string) error {
 	if mock.InsertFunc == nil {
 		panic("RepositoryMock.InsertFunc: method is nil but Repository.Insert was just called")
 	}
 	callInfo := struct {
-		Key []byte
-		URL string
+		Key   string
+		Value string
 	}{
-		Key: key,
-		URL: url,
+		Key:   key,
+		Value: value,
 	}
 	mock.lockInsert.Lock()
 	mock.calls.Insert = append(mock.calls.Insert, callInfo)
 	mock.lockInsert.Unlock()
-	return mock.InsertFunc(key, url)
+	return mock.InsertFunc(key, value)
 }
 
 // InsertCalls gets all the calls that were made to Insert.
 // Check the length with:
 //     len(mockedRepository.InsertCalls())
 func (mock *RepositoryMock) InsertCalls() []struct {
-	Key []byte
-	URL string
+	Key   string
+	Value string
 } {
 	var calls []struct {
-		Key []byte
-		URL string
+		Key   string
+		Value string
 	}
 	mock.lockInsert.RLock()
 	calls = mock.calls.Insert
