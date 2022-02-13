@@ -12,7 +12,7 @@ const urlBucketName = "shorten"
 type Repository interface {
 	Insert(key string, value string) error
 	Get(key string) (string, error)
-	Close()
+	Close() error
 }
 
 type URLRepository struct {
@@ -33,11 +33,13 @@ func NewURLRepository() *URLRepository {
 	}
 }
 
-func (urlRep *URLRepository) Close() {
+func (urlRep *URLRepository) Close() error {
 	err := urlRep.db.Close()
-	if err != nil{
-		log.Error("Failed to close db gracefully %s", err)
+	if err != nil {
+		return fmt.Errorf("Failed to close db gracefully %w", err)
 	}
+
+	return nil
 }
 
 func (urlRep *URLRepository) Insert(key string, url string) error {

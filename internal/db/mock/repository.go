@@ -18,7 +18,7 @@ var _ db.Repository = &RepositoryMock{}
 //
 // 		// make and configure a mocked db.Repository
 // 		mockedRepository := &RepositoryMock{
-// 			CloseFunc: func()  {
+// 			CloseFunc: func() error {
 // 				panic("mock out the Close method")
 // 			},
 // 			GetFunc: func(key string) (string, error) {
@@ -35,7 +35,7 @@ var _ db.Repository = &RepositoryMock{}
 // 	}
 type RepositoryMock struct {
 	// CloseFunc mocks the Close method.
-	CloseFunc func()
+	CloseFunc func() error
 
 	// GetFunc mocks the Get method.
 	GetFunc func(key string) (string, error)
@@ -67,7 +67,7 @@ type RepositoryMock struct {
 }
 
 // Close calls CloseFunc.
-func (mock *RepositoryMock) Close() {
+func (mock *RepositoryMock) Close() error {
 	if mock.CloseFunc == nil {
 		panic("RepositoryMock.CloseFunc: method is nil but Repository.Close was just called")
 	}
@@ -76,7 +76,7 @@ func (mock *RepositoryMock) Close() {
 	mock.lockClose.Lock()
 	mock.calls.Close = append(mock.calls.Close, callInfo)
 	mock.lockClose.Unlock()
-	mock.CloseFunc()
+	return mock.CloseFunc()
 }
 
 // CloseCalls gets all the calls that were made to Close.
