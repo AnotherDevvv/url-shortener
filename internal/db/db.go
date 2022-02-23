@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"github.com/boltdb/bolt"
-	log "github.com/sirupsen/logrus"
 )
 
 const urlBucketName = "shorten"
@@ -16,27 +15,27 @@ type Repository interface {
 }
 
 type URLRepository struct {
-	db *bolt.DB
+	filepath string
+	db       *bolt.DB
 }
 
-func NewURLRepository() *URLRepository {
+func NewURLRepository(filepath string) *URLRepository {
 	return &URLRepository{
-		db: func() *bolt.DB {
-			db, err := bolt.Open("shortener.db", 0600, nil)
-			if err != nil {
-				log.Fatalf("Unable to create embedded db due to %s", err)
-				panic(err)
-			}
-
-			return db
-		}(),
+		filepath: filepath,
 	}
+}
+
+func (urlRep *URLRepository) Open() error {
+	db, err := bolt.Open(urlRep.filepath, 0600, nil)
+
+	urlRep.db = db
+	return err
 }
 
 func (urlRep *URLRepository) Close() error {
 	err := urlRep.db.Close()
 	if err != nil {
-		return fmt.Errorf("Failed to close db gracefully %w", err)
+		return fmt.Errorf("failed to close db gracefully %w", err)
 	}
 
 	return nil

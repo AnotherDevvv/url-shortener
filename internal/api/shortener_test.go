@@ -14,7 +14,6 @@ import (
 	"urlShortener/internal/db/mock"
 )
 
-
 const (
 	host          = "http://127.0.0.1:1323/"
 	validURL = "http://hostname/testpath"
@@ -23,6 +22,7 @@ const (
 
 func TestShortener_ShortenURL(t *testing.T) {
 	testCases := []struct {
+		testName		 string
 		url              string
 		expectedStatus   int
 		expectedCode     string
@@ -30,6 +30,7 @@ func TestShortener_ShortenURL(t *testing.T) {
 		repository       db.Repository
 	}{
 		{
+			testName: 		"regular valid URL is encoded, return 200",
 			url:            validURL,
 			expectedStatus: http.StatusOK,
 			expectedCode: encode(validURL),
@@ -43,23 +44,12 @@ func TestShortener_ShortenURL(t *testing.T) {
 			},
 		},
 		{
-			url:            validURL,
-			expectedStatus: http.StatusOK,
-			expectedCode: encode(validURL),
-			repository: &mock.RepositoryMock{
-				InsertFunc: func(key string, url string) error {
-					return nil
-				},
-				GetFunc: func(key string) (string, error) {
-					return validURL, nil
-				},
-			},
-		},
-		{
+			testName: 		"Invalid URL without protocol, return 400",
 			url:            "127.0.0.1",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
+			testName: 		"DB is unavailable return 503",
 			url:            serverFailURL,
 			expectedStatus: http.StatusServiceUnavailable,
 			repository: &mock.RepositoryMock{
@@ -84,42 +74,42 @@ func TestShortener_ShortenURL(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		closer := configureRouter(tc.repository)
+		t.Run(tc.testName, func(t *testing.T) {
+			closer := configureRouter(tc.repository)
 
-		req, err := http.NewRequest(
-			echo.POST,
-			fmt.Sprintf("%sshorten?url=%s", host, tc.url),
-			strings.NewReader(``),
-		)
-
-		resp, err := client.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-
-
-		require.Equal(t, tc.expectedStatus, resp.StatusCode)
-		if resp.StatusCode == http.StatusOK {
-			require.Equal(t, tc.expectedCode, string(body))
-
-			req, err = http.NewRequest(
-				echo.GET,
-				fmt.Sprintf("%s%s", host, tc.expectedCode),
+			req, err := http.NewRequest(
+				echo.POST,
+				fmt.Sprintf("%sshorten?url=%s", host, tc.url),
 				strings.NewReader(``),
 			)
 
-			resp, err = client.Do(req)
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
 
-			require.Equal(t, http.StatusMovedPermanently, resp.StatusCode)
-			require.Equal(t, tc.url, resp.Header.Get("Location"))
-		}
+			require.Equal(t, tc.expectedStatus, resp.StatusCode)
+			if resp.StatusCode == http.StatusOK {
+				require.Equal(t, tc.expectedCode, string(body))
 
-		err = closer()
-		if err != nil {
-			continue
-		}
+				req, err = http.NewRequest(
+					echo.GET,
+					fmt.Sprintf("%s%s", host, tc.expectedCode),
+					strings.NewReader(``),
+				)
+
+				resp, err = client.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+
+				require.Equal(t, http.StatusMovedPermanently, resp.StatusCode)
+				require.Equal(t, tc.url, resp.Header.Get("Location"))
+			}
+
+			err = closer()
+			require.NoError(t, err)
+		},
+		)
 	}
 }
 
@@ -132,13 +122,14 @@ func configureRouter(repository db.Repository) func() error {
 		return nil
 	})
 
-	go router.Start()
-	awaitServerStart(5*time.Second)
+	routerc := make(chan error, 1)
+	go router.Start(routerc)
+	awaitServerStart(5 * time.Second)
 
 	return router.Close
 }
 
-func awaitServerStart(timeout time.Duration)  {
+func awaitServerStart(timeout time.Duration) {
 	fmt.Printf("Awaiting for server to start in %s", timeout)
 
 	req, _ := http.NewRequest(

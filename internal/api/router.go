@@ -4,13 +4,10 @@ import (
 	stdContext "context"
 	"fmt"
 	"github.com/labstack/echo/v4"
-	log "github.com/sirupsen/logrus"
-	"net/http"
 	"time"
 )
 
-
-const port = "1323"
+const Port = "1323"
 
 type Router struct {
 	shortener *Shortener
@@ -28,16 +25,8 @@ func NewRouter(sh *Shortener) *Router {
 	}
 }
 
-func (r *Router) Start() {
-	err := r.echo.Start(":" + port)
-
-	switch err {
-	case http.ErrServerClosed:
-		log.Infof("Server on %s port has been closed", port)
-	default:
-		log.Fatalf("Unable to start echo server on port %s, reason %s", port, err)
-		panic(err)
-	}
+func (r *Router) Start(errc chan error) {
+	errc <- r.echo.Start(":" + Port)
 }
 
 func (r *Router) Close() error {
@@ -45,12 +34,8 @@ func (r *Router) Close() error {
 	defer cancel()
 	err := r.echo.Shutdown(ctx)
 	if err != nil {
-		return fmt.Errorf("Failed to gracefully stop echo server on port %s, reason %w", port, err)
+		return fmt.Errorf("failed to gracefully stop echo server on port %s, reason %w", Port, err)
 	}
 
 	return nil
 }
-
-
-
-

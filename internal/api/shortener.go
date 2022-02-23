@@ -34,6 +34,10 @@ func (sh *Shortener) ShortenURL(c echo.Context) error {
 
 	key := encode(url)
 	value, err := sh.urlRepository.Get(key)
+	if err != nil {
+		log.Errorf("Failed to check key existence for url %s. Cause: %s", url, err)
+		return c.NoContent(http.StatusServiceUnavailable)
+	}
 
 	if len(value) > 0 {
 		if url == value {
@@ -43,7 +47,7 @@ func (sh *Shortener) ShortenURL(c echo.Context) error {
 		key, err = sh.regenerate(key)
 	}
 	if err != nil {
-		log.Errorf("Failed to generate key for url %s. Cause: %s", url, err)
+		log.Errorf("Failed to regenerate key for url %s. Cause: %s", url, err)
 		return c.NoContent(http.StatusServiceUnavailable)
 	}
 

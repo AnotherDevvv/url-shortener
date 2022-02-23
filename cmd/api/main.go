@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,34 +13,46 @@ import (
 )
 
 func main() {
-	initLogger()
+	var err error
 
-	repository := db.NewURLRepository()
+	if err = initLogger(); err != nil {
+		fmt.Printf("Cannot init logger %s", err)
+		os.Exit(1)
+	}
+
+	repository := db.NewURLRepository("shortener.db")
+	if err = repository.Open(); err != nil {
+		log.Errorf("Unable to create embedded db due to %s", err)
+		os.Exit(1)
+	}
 
 	shortener := api.NewShortener(repository)
 
 	router := api.NewRouter(shortener)
-	go router.Start()
+	routerc := make(chan error, 1)
+	go router.Start(routerc)
 
-	awaitTermination(router, repository)
+	if err = awaitTermination(routerc, router, repository); err != nil {
+		os.Exit(1)
+	}
 }
 
-func initLogger()  {
+func initLogger() error {
 	logfile, err := os.OpenFile("logs", os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		panic("Unable to create log file")
+		return fmt.Errorf("unable to create log file %w", err)
 	}
 
 	log.SetOutput(logfile)
+	return nil
 }
 
-func awaitTermination(closers ...io.Closer) {
+func awaitTermination(routerc chan error, closers ...io.Closer) error {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	terminated := make(chan bool, 1)
 
-	go func() {
-		sig := <-signals
+	select {
+	case sig:= <-signals:
 		log.Infof("Received %s signal", sig)
 		for _, c := range closers {
 			err := c.Close()
@@ -46,9 +60,16 @@ func awaitTermination(closers ...io.Closer) {
 				log.Errorf("Unable to close: %s", err)
 			}
 		}
-		terminated <- true
-	}()
+	case err:= <-routerc:
+		switch err {
+		case http.ErrServerClosed:
+			log.Infof("Server on %s port has been closed", api.Port)
+		default:
+			log.Errorf("Server on %s port failed to start", api.Port)
+			return err
+		}
+	}
 
-	<-terminated
 	log.Infof("Exiting application")
+	return nil
 }
