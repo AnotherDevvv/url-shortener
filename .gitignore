@@ -1,0 +1,5 @@
+.idea
+logs
+*.db
+*.db.lock
+*.exe
