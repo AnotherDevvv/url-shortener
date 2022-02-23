@@ -5,18 +5,18 @@ package mock
 
 import (
 	"sync"
-	"urlShortener/internal/db"
+	"urlShortener/internal/api"
 )
 
-// Ensure, that RepositoryMock does implement db.Repository.
+// Ensure, that RepositoryMock does implement api.Repository.
 // If this is not the case, regenerate this file with moq.
-var _ db.Repository = &RepositoryMock{}
+var _ api.Repository = &RepositoryMock{}
 
-// RepositoryMock is a mock implementation of db.Repository.
+// RepositoryMock is a mock implementation of api.Repository.
 //
 // 	func TestSomethingThatUsesRepository(t *testing.T) {
 //
-// 		// make and configure a mocked db.Repository
+// 		// make and configure a mocked api.Repository
 // 		mockedRepository := &RepositoryMock{
 // 			CloseFunc: func() error {
 // 				panic("mock out the Close method")
@@ -29,7 +29,7 @@ var _ db.Repository = &RepositoryMock{}
 // 			},
 // 		}
 //
-// 		// use mockedRepository in code that requires db.Repository
+// 		// use mockedRepository in code that requires api.Repository
 // 		// and then make assertions.
 //
 // 	}

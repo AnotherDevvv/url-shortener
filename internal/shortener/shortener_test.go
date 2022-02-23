@@ -1,4 +1,4 @@
-package api
+package shortener_test
 
 import (
 	"errors"
@@ -10,8 +10,10 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"urlShortener/internal/db"
+	"urlShortener/internal/api"
 	"urlShortener/internal/db/mock"
+	"urlShortener/internal/router"
+	"urlShortener/internal/shortener"
 )
 
 const (
@@ -27,13 +29,13 @@ func TestShortener_ShortenURL(t *testing.T) {
 		expectedStatus   int
 		expectedCode     string
 		expectedLocation string
-		repository       db.Repository
+		repository       api.Repository
 	}{
 		{
-			testName: 		"regular valid URL is encoded, return 200",
+			testName:       "regular valid URL is encoded, return 200",
 			url:            validURL,
 			expectedStatus: http.StatusOK,
-			expectedCode: encode(validURL),
+			expectedCode:   shortener.Encode(validURL),
 			repository: &mock.RepositoryMock{
 				InsertFunc: func(key string, url string) error {
 					return nil
@@ -49,13 +51,13 @@ func TestShortener_ShortenURL(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			testName: 		"DB is unavailable return 503",
+			testName:       "DB is unavailable return 503",
 			url:            serverFailURL,
 			expectedStatus: http.StatusServiceUnavailable,
 			repository: &mock.RepositoryMock{
 				InsertFunc: func(key string, url string) error {
 					if url == serverFailURL {
-						return errors.New("emulate db unavailable")
+						return errors.New("emulate api.unavailable")
 					}
 					return nil
 				},
@@ -113,12 +115,12 @@ func TestShortener_ShortenURL(t *testing.T) {
 	}
 }
 
-func configureRouter(repository db.Repository) func() error {
-	router := NewRouter(
-		NewShortener(repository),
+func configureRouter(repository api.Repository) func() error {
+	router := router.NewRouter(
+		shortener.NewShortener(repository),
 	)
 
-	router.echo.TRACE("/", func(context echo.Context) error {
+	router.Trace("/", func(context echo.Context) error {
 		return nil
 	})
 

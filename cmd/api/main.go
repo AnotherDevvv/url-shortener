@@ -8,8 +8,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"urlShortener/internal/api"
 	"urlShortener/internal/db"
+	"urlShortener/internal/router"
+	"urlShortener/internal/shortener"
 )
 
 func main() {
@@ -26,9 +27,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	shortener := api.NewShortener(repository)
+	shortener := shortener.NewShortener(repository)
 
-	router := api.NewRouter(shortener)
+	router := router.NewRouter(shortener)
 	routerc := make(chan error, 1)
 	go router.Start(routerc)
 
@@ -63,9 +64,9 @@ func awaitTermination(routerc chan error, closers ...io.Closer) error {
 	case err:= <-routerc:
 		switch err {
 		case http.ErrServerClosed:
-			log.Infof("Server on %s port has been closed", api.Port)
+			log.Infof("Server on %s port has been closed", router.Port)
 		default:
-			log.Errorf("Server on %s port failed to start", api.Port)
+			log.Errorf("Server on %s port failed to start", router.Port)
 			return err
 		}
 	}
